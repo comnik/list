@@ -1,5 +1,6 @@
 import csv
 import datetime
+from itertools import chain
 
 import numpy                as np
 import matplotlib.pyplot    as plt
@@ -10,23 +11,58 @@ def logscore(gtruth, gpred):
     """
     Returns the score based on the loss function given in the assignment.
     """
-    gpred = np.clip(gpred,0,np.inf)
+    gpred = np.clip(gpred, 0, np.inf)
     logdif = np.log(1 + gtruth) - np.log(1 + gpred)
     return np.sqrt(np.mean(np.square(logdif)))
 
 
-def to_feature_vec(t):
+def least_squares_loss(gtruth, gpred):
+    """
+    Returns the score based on the least squares loss function.
+    """
+    gpred = np.clip(gpred, 0, np.inf)
+    dif = gtruth - gpred
+    return np.sqrt(np.mean(np.square(dif)))
+
+
+def transform_back(ypred):
+    """
+    Thanks Etienne. For nothing.
+    """
+    return np.exp(ypred) - 1
+
+
+epoch = datetime.datetime.utcfromtimestamp(0)
+
+
+def period(data, per, n):
+    """
+    """
+    per_params = (per/x for x in range(1, n))
+    return [f for g in [[np.sin(data/(y*2*np.pi)), np.cos(data/(y*2*np.pi))] for y in per_params] for f in g]
+
+
+def to_feature_vec(row):
     """
     Returns the feature-vector representation of a piece of input data.
     """
-    return [t, np.exp(t)]
+    date_str = row[0]
+    params = [float(col) for col in row[1:]]
+    # exp_params = [np.exp(p) for p in params]
+
+    a, b, c, temp, e, f = params
+
+    date = get_date(date_str)
+    minutes = (date - epoch).total_seconds() / 60
+
+    return [f for g in [[date.hour, a, b, c, temp, e, f], period(date.hour, 24, 24), period(minutes, 60, 60)] for f in g]
 
 
-def get_date(row):
+def get_date(s):
     """
     Helper function that reads dates in our expected format.
     """
-    return datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
+    return datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
 
 
 def get_features(inpath):
@@ -35,41 +71,44 @@ def get_features(inpath):
     """
     with open(inpath, 'r') as fin:
         reader = csv.reader(fin, delimiter=',')
-        dates = (get_date(row) for row in reader)
-        X = [to_feature_vec(t.hour) for t in dates]
+        X = [to_feature_vec(row) for row in reader]
 
-    return np.atleast_2d(X)
+    return np.atleast_1d(X)
 
 
 def main():
+    plt.ion()
+
     # Read labelled training data.
     # We train on the tuples (x, y).
     X = get_features('project_data/train.csv')
     Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
+    Y = np.log(1 + Y)
 
     # Split training and test data.
     Xtrain, Xtest, Ytrain, Ytest = cross_validation.train_test_split(X, Y, train_size=0.75)
-    plt.plot(Xtrain[:, 0], Ytrain, 'bo')
-    plt.show()
+    # Xtrain = X
+    # Ytrain = Y
 
-    # regressor = linear_model.LinearRegression()
-    # regressor.fit(Xtrain, Ytrain)
+    regressor = linear_model.LinearRegression()
+    regressor.fit(Xtrain, Ytrain)
 
     # print(regressor.coef_)
     # print(regressor.intercept_)
 
-    # Hplot = range(25)
-    # Xplot = np.atleast_2d([get_features(x) for x in Hplot])
-    # Yplot = regressor.predict(Xplot) #predictions
+    # Hplot = Xtrain[:, 0]
+    # Xplot = np.atleast_1d([[x] for x in Hplot])
+    Xplot = Xtrain[:, 0]
+    Yplot = regressor.predict(Xtrain) #predictions
 
-    # plt.plot(Xtrain[:, 0], Ytrain, 'bo') # input data
-    # plt.plot(Hplot,Yplot,'r',linewidth = 3) # prediction
-    # plt.show()
+    plt.plot(Xplot, Ytrain, 'bo') # input data
+    plt.plot(Xplot, Yplot, 'ro', linewidth = 3) # prediction
+    plt.show()
 
-    # logscore(Ytest,regressor.predict(Xtest))
-    # scorefun = metrics.make_scorer(logscore)
-    # scores = cross_validation.cross_val_score(regressor,X,Y,scoring=scorefun,cv = 5)
-    # print('mean : ', np.mean(scores),' +/- ' ,np.std(scores))
+    scorefun = metrics.make_scorer(least_squares_loss)
+    scores = cross_validation.cross_val_score(regressor, X, Y, scoring = scorefun, cv = 5)
+    print('Scores: ', scores)
+    print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
 
     # regressor_ridge = linear_model.Ridge()
     # param_grid = {'alpha' : np.linspace(0,100,10)} # number of alphas is arbitrary
@@ -79,10 +118,13 @@ def main():
     # print(gs.best_estimator_)
     # print(gs.best_score_)
 
-    # Xval = get_features('project_data/validate.csv')
+    Xval = get_features('project_data/validate.csv')
     # Ypred = gs.best_estimator_.predict(Xval)
+    Ypred = transform_back(regressor.predict(Xval))
     # print(Ypred)
-    # np.savetxt('out/validate_y.txt', Ypred)
+    np.savetxt('out/validate_y.txt', Ypred)
+
+    raw_input('Press any key to exit...')
 
 
 if __name__ == "__main__":
