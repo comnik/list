@@ -7,6 +7,9 @@ from   sklearn              import linear_model, metrics, cross_validation, grid
 
 
 def logscore(gtruth, gpred):
+    """
+    Returns the score based on the loss function given in the assignment.
+    """
     gpred = np.clip(gpred,0,np.inf)
     logdif = np.log(1 + gtruth) - np.log(1 + gpred)
     return np.sqrt(np.mean(np.square(logdif)))
