@@ -12,7 +12,7 @@ def logscore(gtruth, gpred):
     return np.sqrt(np.mean(np.square(logdif)))
 
 
-def get_features(t):
+def to_feature_vec(t):
     """
     Returns the feature-vector representation of a piece of input data.
     """
@@ -30,11 +30,10 @@ def get_features(inpath):
     """
     Reads our input data from a csv file.
     """
-    with open(inpath,'r') as fin:
+    with open(inpath, 'r') as fin:
         reader = csv.reader(fin, delimiter=',')
-        rows = (row for row in reader)
-        dates = (get_date(row) for row in rows)
-        X = [get_features(t.hour) for t in dates]
+        dates = (get_date(row) for row in reader)
+        X = [to_feature_vec(t.hour) for t in dates]
 
     return np.atleast_2d(X)
 
@@ -51,7 +50,7 @@ def main():
     plt.show()
 
     # regressor = linear_model.LinearRegression()
-    # regressor.fit(Xtrain,Ytrain)
+    # regressor.fit(Xtrain, Ytrain)
 
     # print(regressor.coef_)
     # print(regressor.intercept_)
