@@ -39,10 +39,16 @@ def period(data, per, n):
     """
     Returns n periodic features from data.
     """
+
+    # We first generate all the parameters, e.g. (24/1 24/2 24/3 ...)
     per_params = (per/x for x in range(1, n))
+
+    # We then calculate both components of our periodic features (sin, cos)
     sines = (np.sin(data / (2*np.pi*y)) for y in per_params)
     cosines = (np.cos(data / (2*np.pi*y)) for y in per_params)
 
+    # Combine the two separate streams of sines and cosines into
+    # one stream of (sin, cos) tuples. Those then need to be chained into a single, long list.
     return list(chain(*zip(sines, cosines)))
 
 
