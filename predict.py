@@ -1,6 +1,6 @@
 import csv
 import datetime
-from itertools import chain
+from itertools              import chain
 
 import numpy                as np
 import matplotlib.pyplot    as plt
@@ -37,9 +37,13 @@ epoch = datetime.datetime.utcfromtimestamp(0)
 
 def period(data, per, n):
     """
+    Returns n periodic features from data.
     """
     per_params = (per/x for x in range(1, n))
-    return [f for g in [[np.sin(data/(y*2*np.pi)), np.cos(data/(y*2*np.pi))] for y in per_params] for f in g]
+    sines = (np.sin(data / (2*np.pi*y)) for y in per_params)
+    cosines = (np.cos(data / (2*np.pi*y)) for y in per_params)
+
+    return list(chain(*zip(sines, cosines)))
 
 
 def to_feature_vec(row):
@@ -47,15 +51,12 @@ def to_feature_vec(row):
     Returns the feature-vector representation of a piece of input data.
     """
     date_str = row[0]
-    params = [float(col) for col in row[1:]]
-    # exp_params = [np.exp(p) for p in params]
-
-    a, b, c, temp, e, f = params
+    a, b, c, temp, e, f = [float(col) for col in row[1:]]
 
     date = get_date(date_str)
     minutes = (date - epoch).total_seconds() / 60
 
-    return [f for g in [[date.hour, a, b, c, temp, e, f], period(date.hour, 24, 24), period(minutes, 60, 60)] for f in g]
+    return [date.hour, a, b, c, temp, e, f] + period(date.hour, 24, 24) + period(minutes, 60, 60)
 
 
 def get_date(s):
