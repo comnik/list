@@ -56,13 +56,15 @@ def to_feature_vec(row):
     """
     Returns the feature-vector representation of a piece of input data.
     """
+    bias = 1
+
     date_str = row[0]
-    a, b, c, temp, e, f = [float(col) for col in row[1:]]
+    a, b, c, temp, hum, precip = [float(col) for col in row[1:]]
 
     date = get_date(date_str)
     minutes = (date - epoch).total_seconds() / 60
 
-    return [date.hour, a, b, c, temp, e, f] + period(date.hour, 24, 24) + period(minutes, 60, 60)
+    return [date.hour, bias, a, b, c, temp, hum, precip] + period(date.hour, 24, 24) + period(minutes, 60, 60) + period(hum, 24, 24)
 
 
 def get_date(s):
@@ -93,14 +95,14 @@ def main():
     Y = np.log(1 + Y)
 
     # Split training and test data.
-    Xtrain, Xtest, Ytrain, Ytest = cross_validation.train_test_split(X, Y, train_size=0.75)
-    # Xtrain = X
-    # Ytrain = Y
+    # Xtrain, Xtest, Ytrain, Ytest = cross_validation.train_test_split(X, Y, train_size=0.75)
+    Xtrain = X
+    Ytrain = Y
 
     regressor = linear_model.LinearRegression()
     regressor.fit(Xtrain, Ytrain)
 
-    # print(regressor.coef_)
+    print('Coefficients: ', regressor.coef_)
     # print(regressor.intercept_)
 
     # Hplot = Xtrain[:, 0]
@@ -110,6 +112,7 @@ def main():
 
     plt.plot(Xplot, Ytrain, 'bo') # input data
     plt.plot(Xplot, Yplot, 'ro', linewidth = 3) # prediction
+    # plt.plot(Xtrain[:, 0], Xtrain[:, 7], 'bo')
     plt.show()
 
     scorefun = metrics.make_scorer(least_squares_loss)
@@ -118,18 +121,23 @@ def main():
     print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
 
     # regressor_ridge = linear_model.Ridge()
-    # param_grid = {'alpha' : np.linspace(0,100,10)} # number of alphas is arbitrary
-    # n_scorefun = metrics.make_scorer(lambda x, y: -logscore(x,y))     #logscore is always maximizing... but we want the minium
-    # gs = grid_search.GridSearchCV(regressor_ridge, param_grid,scoring = n_scorefun, cv = 5)
-    # gs.fit(Xtrain,Ytrain)
-    # print(gs.best_estimator_)
-    # print(gs.best_score_)
+    # param_grid = {'alpha' : np.linspace(0, 100, 10)} # number of alphas is arbitrary
+    # n_scorefun = metrics.make_scorer(lambda x, y: -least_squares_loss(x,y)) #logscore is always maximizing... but we want the minium
+    # gs = grid_search.GridSearchCV(regressor_ridge, param_grid, scoring = n_scorefun, cv = 5)
+    # gs.fit(Xtrain, Ytrain)
 
-    Xval = get_features('project_data/validate.csv')
-    # Ypred = gs.best_estimator_.predict(Xval)
-    Ypred = transform_back(regressor.predict(Xval))
-    # print(Ypred)
-    np.savetxt('out/validate_y.txt', Ypred)
+    # # print(gs.best_estimator_)
+    # # print(gs.best_score_)
+
+    # scores = cross_validation.cross_val_score(gs.best_estimator_, X, Y, scoring = scorefun, cv = 5)
+    # print('Scores: ', scores)
+    # print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
+
+    # Xval = get_features('project_data/validate.csv')
+    # # Ypred = gs.best_estimator_.predict(Xval)
+    # Ypred = transform_back(regressor.predict(Xval))
+    # # print(Ypred)
+    # np.savetxt('out/validate_y.txt', Ypred)
 
     raw_input('Press any key to exit...')
 
