@@ -1,10 +1,14 @@
 import csv
 import datetime
+import pprint
 from itertools              import chain
 
 import numpy                as np
 import matplotlib.pyplot    as plt
-from   sklearn              import linear_model, metrics, cross_validation, grid_search
+from   sklearn              import svm, linear_model, metrics, cross_validation, grid_search, preprocessing, feature_extraction
+
+
+Poly = preprocessing.PolynomialFeatures(degree=3)
 
 
 def logscore(gtruth, gpred):
@@ -52,6 +56,11 @@ def period(data, per, n):
     return list(chain(*zip(sines, cosines)))
 
 
+boole = lambda x: 1 if x else 0
+
+feature_names = ["hour", "bias", "a", "c", "temp", "hum", "precip"] + ["hour %s" % i for i in range(1, 48)] + ["b == %s" % i for i in range(4)]
+
+
 def to_feature_vec(row):
     """
     Returns the feature-vector representation of a piece of input data.
@@ -64,7 +73,19 @@ def to_feature_vec(row):
     date = get_date(date_str)
     minutes = (date - epoch).total_seconds() / 60
 
-    return [date.hour, bias, a, b, c, temp, hum, precip] + period(date.hour, 24, 24) + period(minutes, 60, 60) + period(hum, 24, 24)
+    year, number, weekday = date.isocalendar()
+
+    categories = [boole(b == x) for x in range(4)]
+    hours = [boole(date.hour == x) for x in range(0, 25)]
+    polynomials = list(chain(*Poly.fit_transform([a,b,c,temp,hum,precip])))
+
+    return [date.hour, bias, a, c, temp, hum, precip] \
+            + hours \
+            + period(date.hour, 24, 24) \
+            + categories \
+            + polynomials \
+            + list(date.isocalendar()) \
+            + [boole(weekday == x) for x in range(1, 8)] # one-hot weekday
 
 
 def get_date(s):
@@ -85,59 +106,103 @@ def get_features(inpath):
     return np.atleast_1d(X)
 
 
-def main():
-    plt.ion()
-
-    # Read labelled training data.
-    # We train on the tuples (x, y).
-    X = get_features('project_data/train.csv')
-    Y = np.genfromtxt('project_data/train_y.csv', delimiter=',')
-    Y = np.log(1 + Y)
-
-    # Split training and test data.
-    # Xtrain, Xtest, Ytrain, Ytest = cross_validation.train_test_split(X, Y, train_size=0.75)
-    Xtrain = X
-    Ytrain = Y
+def linear_regression(Xtrain, Ytrain, X, Y):
+    """
+    Trains a model using linear regression.
+    """
 
     regressor = linear_model.LinearRegression()
     regressor.fit(Xtrain, Ytrain)
-
-    print('Coefficients: ', regressor.coef_)
-    # print(regressor.intercept_)
-
-    # Hplot = Xtrain[:, 0]
-    # Xplot = np.atleast_1d([[x] for x in Hplot])
-    Xplot = Xtrain[:, 0]
-    Yplot = regressor.predict(Xtrain) #predictions
-
-    plt.plot(Xplot, Ytrain, 'bo') # input data
-    plt.plot(Xplot, Yplot, 'ro', linewidth = 3) # prediction
-    # plt.plot(Xtrain[:, 0], Xtrain[:, 7], 'bo')
-    plt.show()
 
     scorefun = metrics.make_scorer(least_squares_loss)
     scores = cross_validation.cross_val_score(regressor, X, Y, scoring = scorefun, cv = 5)
     print('Scores: ', scores)
     print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
 
-    # regressor_ridge = linear_model.Ridge()
-    # param_grid = {'alpha' : np.linspace(0, 100, 10)} # number of alphas is arbitrary
-    # n_scorefun = metrics.make_scorer(lambda x, y: -least_squares_loss(x,y)) #logscore is always maximizing... but we want the minium
-    # gs = grid_search.GridSearchCV(regressor_ridge, param_grid, scoring = n_scorefun, cv = 5)
+    return regressor
+
+
+def kernelized_regression(Xtrain, Ytrain, X, Y):
+    """
+    Trains a model using a kernelized support vector regression.
+    """
+
+    param_grid = {
+        'C':        10.0 ** np.arange(-2, 9),
+        # 'gamma':    10.0 ** np.arange(-5, 4)
+    }
+
+    model = svm.SVR(kernel='poly', cache_size=400)
+
+    scorefun = metrics.make_scorer(lambda x, y: least_squares_loss(x,y)) #logscore is always maximizing... but we want the minium
+    # gs = grid_search.GridSearchCV(model, param_grid, scoring = scorefun, cv = 5)
     # gs.fit(Xtrain, Ytrain)
+    # model = gs.best_estimator_
+    model.fit(Xtrain, Ytrain)
 
-    # # print(gs.best_estimator_)
-    # # print(gs.best_score_)
+    # print('Best Score: ', gs.best_score_)
+    scores = cross_validation.cross_val_score(model, X, Y, scoring = scorefun, cv = 5)
+    print('Scores: ', scores)
+    print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
 
-    # scores = cross_validation.cross_val_score(gs.best_estimator_, X, Y, scoring = scorefun, cv = 5)
-    # print('Scores: ', scores)
-    # print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
+    return model
 
-    # Xval = get_features('project_data/validate.csv')
-    # # Ypred = gs.best_estimator_.predict(Xval)
-    # Ypred = transform_back(regressor.predict(Xval))
-    # # print(Ypred)
-    # np.savetxt('out/validate_y.txt', Ypred)
+
+def ridge_regression(Xtrain, Ytrain, X, Y):
+    """
+    Trains a model using a ridge regression.
+    """
+
+    regressor = linear_model.Ridge()
+    param_grid = {'alpha' : np.linspace(0, 100, 10)} # number of alphas is arbitrary
+    scorefun = metrics.make_scorer(lambda x, y: -least_squares_loss(x, y)) # logscore is always maximizing... but we want the minium
+    gs = grid_search.GridSearchCV(regressor, param_grid, scoring = scorefun, cv = 5)
+    gs.fit(Xtrain,Ytrain)
+
+    model = gs.best_estimator_
+
+    print(gs.best_estimator_)
+    print(gs.best_score_)
+
+    return model
+
+
+def main():
+    plt.ion()
+
+    # Read labelled training data.
+    # We train on the tuples (x, y).
+    X = get_features('project_data/train.csv')
+    Y = np.log(1 + np.genfromtxt('project_data/train_y.csv', delimiter=','))
+
+    # Split training and test data.
+    Xtrain, Xtest, Ytrain, Ytest = cross_validation.train_test_split(X, Y, train_size=0.75)
+
+    # Train the model.
+    # model = linear_regression(Xtrain, Ytrain, X, Y)
+    model = kernelized_regression(Xtrain, Ytrain, X, Y)
+    # model = ridge_regression(Xtrain, Ytrain, X, Y)
+
+    # coef_dict = dict(zip(feature_names, regressor.coef_))
+    # # print('Coefficients: ', regressor.coef_)
+    # pp = pprint.PrettyPrinter(indent=4)
+    # pp.pprint(coef_dict)
+    # # print(regressor.intercept_)
+
+    Xplot = Xtest[:, 0]
+    Yplot = model.predict(Xtest)
+
+    # plt.plot(Xplot, Ytest, 'bo', alpha = 0.1) # input data
+    # plt.plot(Xplot, Yplot, 'ro', linewidth = 3, alpha = 0.1)
+    plt.plot(Xplot, Yplot - Ytest, 'ro', linewidth = 3, alpha = 0.1) # prediction
+    plt.show()
+
+    ### Output ###
+    model.fit(X, Y)
+
+    Xval = get_features('project_data/validate.csv')
+    Ypred = transform_back(model.predict(Xval))
+    np.savetxt('out/validate_y.txt', Ypred)
 
     raw_input('Press any key to exit...')
 
