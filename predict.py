@@ -1,14 +1,14 @@
 import csv
 import datetime
 import pprint
-from itertools              import chain
+from itertools              import chain, groupby
 
 import numpy                as np
 import matplotlib.pyplot    as plt
-from   sklearn              import svm, linear_model, metrics, cross_validation, grid_search, preprocessing, feature_extraction
+from   sklearn              import svm, linear_model, metrics, cross_validation, grid_search, preprocessing, feature_extraction, ensemble
 
 
-Poly = preprocessing.PolynomialFeatures(degree=3)
+Poly = preprocessing.PolynomialFeatures(degree=5)
 
 
 def logscore(gtruth, gpred):
@@ -77,15 +77,11 @@ def to_feature_vec(row):
 
     categories = [boole(b == x) for x in range(4)]
     hours = [boole(date.hour == x) for x in range(0, 25)]
-    polynomials = list(chain(*Poly.fit_transform([a,b,c,temp,hum,precip])))
+    polynomials = list(chain(*Poly.fit_transform([date.hour, temp, bias])))
+    weekdays = [boole(weekday == x) for x in range(1, 8)]
 
-    return [date.hour, bias, a, c, temp, hum, precip] \
-            + hours \
-            + period(date.hour, 24, 24) \
-            + categories \
-            + polynomials \
-            + list(date.isocalendar()) \
-            + [boole(weekday == x) for x in range(1, 8)] # one-hot weekday
+    return [date.hour, bias, a, c, temp, hum, precip] + hours + categories + polynomials + weekdays + list(date.isocalendar())
+             # + period(date.hour, 24, 24)
 
 
 def get_date(s):
@@ -111,7 +107,8 @@ def linear_regression(Xtrain, Ytrain, X, Y):
     Trains a model using linear regression.
     """
 
-    regressor = linear_model.LinearRegression()
+    # regressor = linear_model.LinearRegression()
+    regressor = ensemble.RandomForestRegressor()
     regressor.fit(Xtrain, Ytrain)
 
     scorefun = metrics.make_scorer(least_squares_loss)
@@ -128,19 +125,21 @@ def kernelized_regression(Xtrain, Ytrain, X, Y):
     """
 
     param_grid = {
-        'C':        10.0 ** np.arange(-2, 9),
-        # 'gamma':    10.0 ** np.arange(-5, 4)
+        'C':        10.0 ** np.arange(3, 9),
+        'gamma':    10.0 ** np.arange(-5, -3)
     }
 
-    model = svm.SVR(kernel='poly', cache_size=400)
+    model = svm.SVR(kernel='linear', C=1e5, cache_size=1000)
 
-    scorefun = metrics.make_scorer(lambda x, y: least_squares_loss(x,y)) #logscore is always maximizing... but we want the minium
+    scorefun = metrics.make_scorer(least_squares_loss) #logscore is always maximizing... but we want the minium
     # gs = grid_search.GridSearchCV(model, param_grid, scoring = scorefun, cv = 5)
     # gs.fit(Xtrain, Ytrain)
     # model = gs.best_estimator_
     model.fit(Xtrain, Ytrain)
 
     # print('Best Score: ', gs.best_score_)
+    # print('Best estimator', gs.best_estimator_)
+
     scores = cross_validation.cross_val_score(model, X, Y, scoring = scorefun, cv = 5)
     print('Scores: ', scores)
     print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
@@ -155,7 +154,7 @@ def ridge_regression(Xtrain, Ytrain, X, Y):
 
     regressor = linear_model.Ridge()
     param_grid = {'alpha' : np.linspace(0, 100, 10)} # number of alphas is arbitrary
-    scorefun = metrics.make_scorer(lambda x, y: -least_squares_loss(x, y)) # logscore is always maximizing... but we want the minium
+    scorefun = metrics.make_scorer(lambda x, y: -logscore(x, y)) # logscore is always maximizing... but we want the minium
     gs = grid_search.GridSearchCV(regressor, param_grid, scoring = scorefun, cv = 5)
     gs.fit(Xtrain,Ytrain)
 
@@ -165,6 +164,20 @@ def ridge_regression(Xtrain, Ytrain, X, Y):
     print(gs.best_score_)
 
     return model
+
+
+def group_predictions(X, Y, feature_index=0):
+    """
+    Returns an iterator over tuples of the form (hour_of_the_day, [predictions]).
+    """
+
+    fst = lambda t: t[feature_index]
+    return groupby(sorted(zip(X, Y), key=fst), key=fst)
+
+
+def rand_jitter(arr):
+    stdev = .01*(max(arr)-min(arr))
+    return arr + np.random.randn(len(arr)) * stdev
 
 
 def main():
@@ -179,22 +192,25 @@ def main():
     Xtrain, Xtest, Ytrain, Ytest = cross_validation.train_test_split(X, Y, train_size=0.75)
 
     # Train the model.
-    # model = linear_regression(Xtrain, Ytrain, X, Y)
-    model = kernelized_regression(Xtrain, Ytrain, X, Y)
+    model = linear_regression(Xtrain, Ytrain, X, Y)
+    # model = kernelized_regression(Xtrain, Ytrain, X, Y)
     # model = ridge_regression(Xtrain, Ytrain, X, Y)
 
-    # coef_dict = dict(zip(feature_names, regressor.coef_))
-    # # print('Coefficients: ', regressor.coef_)
-    # pp = pprint.PrettyPrinter(indent=4)
+    # print('Coefficients: ', model.coef_)
+    # print(model.intercept_)
+    pp = pprint.PrettyPrinter(indent=4)
     # pp.pprint(coef_dict)
-    # # print(regressor.intercept_)
 
+    Hplot = np.array(range(0, 24))
     Xplot = Xtest[:, 0]
     Yplot = model.predict(Xtest)
 
-    # plt.plot(Xplot, Ytest, 'bo', alpha = 0.1) # input data
-    # plt.plot(Xplot, Yplot, 'ro', linewidth = 3, alpha = 0.1)
-    plt.plot(Xplot, Yplot - Ytest, 'ro', linewidth = 3, alpha = 0.1) # prediction
+    mean_prediction = np.array([np.mean(list(g)) for k, g in group_predictions(preprocessing.scale(Xplot), Yplot)])
+
+    plt.plot(Xplot, Ytest, 'bo', alpha = 0.1) # input data
+    plt.plot(Xplot, Yplot, 'go', alpha = 0.3)
+    plt.plot(Hplot, mean_prediction, 'r', linewidth = 3)
+    # plt.plot(Xplot, np.exp(Yplot - Ytest), 'ro', linewidth = 3, alpha = 0.1) # prediction
     plt.show()
 
     ### Output ###
