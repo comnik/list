@@ -9,8 +9,8 @@ from itertools              import chain
 
 import numpy                as np
 import matplotlib.pyplot    as plt
-from   sklearn import linear_model, metrics, cross_validation
-# from   sklearn              import svm, linear_model, metrics, cross_validation, grid_search, preprocessing, feature_extraction #niko
+from   sklearn import linear_model, metrics, cross_validation # etienned imports
+from   sklearn              import svm, linear_model, metrics, cross_validation, grid_search, preprocessing, feature_extraction #niko imports
 
 
 Poly = preprocessing.PolynomialFeatures(degree=3)
