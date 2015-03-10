@@ -1,10 +1,13 @@
 import csv
 import datetime
-from itertools              import chain
+from itertools import chain
+import os
+import shutil
+from math import *
 
 import numpy                as np
 import matplotlib.pyplot    as plt
-from   sklearn              import linear_model, metrics, cross_validation, grid_search
+from   sklearn import linear_model, metrics, cross_validation
 
 
 def logscore(gtruth, gpred):
@@ -41,15 +44,22 @@ def period(data, per, n):
     """
 
     # We first generate all the parameters, e.g. (24/1 24/2 24/3 ...)
-    per_params = (per/x for x in range(1, n))
+    per_params = (per / x for x in range(1, n + 1))
 
     # We then calculate both components of our periodic features (sin, cos)
-    sines = (np.sin(data / (2*np.pi*y)) for y in per_params)
-    cosines = (np.cos(data / (2*np.pi*y)) for y in per_params)
+    sines = (sin(data / (2 * pi * y)) for y in per_params)
+    cosines = (cos(data / (2 * pi * y)) for y in per_params)
 
     # Combine the two separate streams of sines and cosines into
     # one stream of (sin, cos) tuples. Those then need to be chained into a single, long list.
     return list(chain(*zip(sines, cosines)))
+
+
+def boole(x):
+    if x:
+        return 1
+    else:
+        return 0
 
 
 def to_feature_vec(row):
@@ -64,7 +74,33 @@ def to_feature_vec(row):
     date = get_date(date_str)
     minutes = (date - epoch).total_seconds() / 60
 
-    return [date.hour, bias, a, b, c, temp, hum, precip] + period(date.hour, 24, 24) + period(minutes, 60, 60) + period(hum, 24, 24)
+    (year, week, day) = date.isocalendar()
+
+    logistic = lambda x: 1 / (1 + exp(-x))
+
+    if asinh(max(date.hour, 4.33085471291034) - 3.23315698150681) >= 3.23315698150681:
+        lolparameter = 0.7310585786300049
+    else:
+        lolparameter = 0.5
+
+    return [date.hour, bias, a, b, c, temp, hum, precip, year, week, day, date.minute
+           ] + period(date.minute, 60, 60) + period(date.hour, 24, 24) + period(day, 7, 7) + period(date.hour, 24 * 7,
+                                                                                                    24 * 7) + period(
+        date.day, 365, 50) + [
+               atan(week) * min(0.628387914132889, min(a, b)),
+               # minutes**2*math.asinh(max(date.hour, 4.30604529803556) - 3.25027364193086),
+               # minutes**2*math.asinh(max(date.hour, 4.35826554407763) - 3.2762492513184),
+               logistic(week) * atan(0.268294337091847 * week) * min(0.615528009111349, a, b),
+               atan2(week, 3.87347963586697) * min(lolparameter, a, b),
+               boole(b == 0), boole(b == 1),
+               sin(a),
+               sin(2.260304361624 * sin(-115.200026399002 / (12.3098089533563 + date.hour))),
+               sin(0.054465515709371 * week),
+               minutes,
+               minutes ** 2,
+               b ** 8.94248740512325e-7 * sin(0.0552724359814239 * week),
+               cos(precip) * sin(0.0552724359814239 * week)
+           ] + [boole(date.hour == x) for x in range(0, 24)]
 
 
 def get_date(s):
@@ -108,15 +144,16 @@ def main():
     # Hplot = Xtrain[:, 0]
     # Xplot = np.atleast_1d([[x] for x in Hplot])
     Xplot = Xtrain[:, 0]
-    Yplot = regressor.predict(Xtrain) #predictions
+    Yplot = regressor.predict(Xtrain)  # predictions
 
-    plt.plot(Xplot, Ytrain, 'bo') # input data
-    plt.plot(Xplot, Yplot, 'ro', linewidth = 3) # prediction
+    # plt.plot(Xplot, Ytrain, 'bo')  # input data
+    # plt.plot(Xplot, Yplot, 'ro', linewidth=3)  # prediction
     # plt.plot(Xtrain[:, 0], Xtrain[:, 7], 'bo')
+    plt.plot(Xplot, Yplot - Ytrain, 'ro', linewidth=0, alpha=0.01)
     plt.show()
 
     scorefun = metrics.make_scorer(least_squares_loss)
-    scores = cross_validation.cross_val_score(regressor, X, Y, scoring = scorefun, cv = 5)
+    scores = cross_validation.cross_val_score(regressor, X, Y, scoring=scorefun, cv=5)
     print('Scores: ', scores)
     print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
 
@@ -138,8 +175,12 @@ def main():
     # Ypred = transform_back(regressor.predict(Xval))
     # # print(Ypred)
     # np.savetxt('out/validate_y.txt', Ypred)
+    folder = str(np.mean(scores))
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+        shutil.copy2('predict.py', folder)
 
-    raw_input('Press any key to exit...')
+        # raw_input('Press any key to exit...')
 
 
 if __name__ == "__main__":
