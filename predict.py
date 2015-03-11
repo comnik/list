@@ -11,15 +11,6 @@ from   sklearn              import svm, linear_model, metrics, cross_validation,
 Poly = preprocessing.PolynomialFeatures(degree=3)
 
 
-def logscore(gtruth, gpred):
-    """
-    Returns the score based on the loss function given in the assignment.
-    """
-    gpred = np.clip(gpred, 0, np.inf)
-    logdif = np.log(1 + gtruth) - np.log(1 + gpred)
-    return np.sqrt(np.mean(np.square(logdif)))
-
-
 def least_squares_loss(gtruth, gpred):
     """
     Returns the score based on the least squares loss function.
@@ -37,24 +28,6 @@ def transform_back(ypred):
 
 
 epoch = datetime.datetime.utcfromtimestamp(0)
-
-
-def period(data, per, n):
-    """
-    Returns n periodic features from data.
-    """
-
-    # We first generate all the parameters, e.g. (24/1 24/2 24/3 ...)
-    per_params = (per/x for x in range(1, n))
-
-    # We then calculate both components of our periodic features (sin, cos)
-    sines = (np.sin(data / (2*np.pi*y)) for y in per_params)
-    cosines = (np.cos(data / (2*np.pi*y)) for y in per_params)
-
-    # Combine the two separate streams of sines and cosines into
-    # one stream of (sin, cos) tuples. Those then need to be chained into a single, long list.
-    return list(chain(*zip(sines, cosines)))
-
 
 boole = lambda x: 1 if x else -1
 
@@ -93,7 +66,8 @@ def get_date(s):
 
 def get_features(inpath):
     """
-    Reads our input data from a csv file.
+    Reads our input data from a csv file
+    and returns the feature-matrix.
     """
     with open(inpath, 'r') as fin:
         reader = csv.reader(fin, delimiter=',')
@@ -108,7 +82,7 @@ def linear_regression(Xtrain, Ytrain, X, Y):
     """
 
     # regressor = linear_model.LinearRegression()
-    regressor = ensemble.RandomForestRegressor(n_estimators=20, n_jobs=-1)
+    regressor = ensemble.RandomForestRegressor(n_estimators=30, n_jobs=-1)
     regressor.fit(Xtrain, Ytrain)
 
     scorefun = metrics.make_scorer(least_squares_loss)
@@ -117,53 +91,6 @@ def linear_regression(Xtrain, Ytrain, X, Y):
     print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
 
     return regressor
-
-
-def kernelized_regression(Xtrain, Ytrain, X, Y):
-    """
-    Trains a model using a kernelized support vector regression.
-    """
-
-    param_grid = {
-        'C':        10.0 ** np.arange(3, 9),
-        'gamma':    10.0 ** np.arange(-5, -3)
-    }
-
-    model = svm.SVR(kernel='linear', C=1e5, cache_size=1000)
-
-    scorefun = metrics.make_scorer(least_squares_loss) #logscore is always maximizing... but we want the minium
-    # gs = grid_search.GridSearchCV(model, param_grid, scoring = scorefun, cv = 5)
-    # gs.fit(Xtrain, Ytrain)
-    # model = gs.best_estimator_
-    model.fit(Xtrain, Ytrain)
-
-    # print('Best Score: ', gs.best_score_)
-    # print('Best estimator', gs.best_estimator_)
-
-    scores = cross_validation.cross_val_score(model, X, Y, scoring = scorefun, cv = 5)
-    print('Scores: ', scores)
-    print('Mean: ', np.mean(scores), ' +/- ', np.std(scores))
-
-    return model
-
-
-def ridge_regression(Xtrain, Ytrain, X, Y):
-    """
-    Trains a model using a ridge regression.
-    """
-
-    regressor = linear_model.Ridge()
-    param_grid = {'alpha' : np.linspace(30, 100, 10)} # number of alphas is arbitrary
-    scorefun = metrics.make_scorer(least_squares_loss) # logscore is always maximizing... but we want the minium
-    gs = grid_search.GridSearchCV(regressor, param_grid, scoring = scorefun, cv = 5)
-    gs.fit(Xtrain,Ytrain)
-
-    model = gs.best_estimator_
-
-    print(gs.best_estimator_)
-    print(gs.best_score_)
-
-    return model
 
 
 def group_predictions(X, Y, feature_index=0):
@@ -193,13 +120,9 @@ def main():
 
     # Train the model.
     model = linear_regression(Xtrain, Ytrain, X, Y)
-    # model = kernelized_regression(Xtrain, Ytrain, X, Y)
-    # model = ridge_regression(Xtrain, Ytrain, X, Y)
 
-    # print('Coefficients: ', model.coef_)
-    # print(model.intercept_)
-    pp = pprint.PrettyPrinter(indent=4)
-    # pp.pprint(coef_dict)
+    print('Coefficients: ', model.coef_)
+    print(model.intercept_)
 
     Hplot = np.array(range(0, 24))
     Xplot = Xtest[:, 0]
@@ -207,15 +130,16 @@ def main():
 
     mean_prediction = np.array([np.mean(list(g)) for k, g in group_predictions(preprocessing.scale(Xplot), Yplot)])
 
-    # plt.plot(Xplot, Ytest, 'bo', alpha = 0.1) # input data
-    # plt.plot(Xplot, Yplot, 'go', alpha = 0.3)
-    # plt.plot(Hplot, mean_prediction, 'r', linewidth = 3)
-    plt.plot(Xplot, np.exp(Yplot - Ytest), 'ro', linewidth = 3, alpha = 0.1) # prediction
+    plt.plot(rand_jitter(Xplot), Ytest, 'bo', alpha = 0.1) # training data
+    plt.plot(Xplot, Yplot, 'go', alpha = 0.3) # prediction
+    # plt.plot(Hplot, mean_prediction, 'r', linewidth = 3) # mean prediction
+    # plt.plot(Xplot, np.exp(Yplot - Ytest), 'ro', linewidth = 3, alpha = 0.1) # residuals
     plt.show()
 
-    ### Output ###
+    # Re-train on the full training set
     model.fit(X, Y)
 
+    # Output
     Xval = get_features('project_data/validate.csv')
     Ypred = transform_back(model.predict(Xval))
     np.savetxt('out/validate_y.txt', Ypred)
