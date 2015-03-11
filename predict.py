@@ -8,7 +8,7 @@ import matplotlib.pyplot    as plt
 from   sklearn              import svm, linear_model, metrics, cross_validation, grid_search, preprocessing, feature_extraction, ensemble
 
 
-Poly = preprocessing.PolynomialFeatures(degree=5)
+Poly = preprocessing.PolynomialFeatures(degree=3)
 
 
 def logscore(gtruth, gpred):
@@ -56,7 +56,7 @@ def period(data, per, n):
     return list(chain(*zip(sines, cosines)))
 
 
-boole = lambda x: 1 if x else 0
+boole = lambda x: 1 if x else -1
 
 feature_names = ["hour", "bias", "a", "c", "temp", "hum", "precip"] + ["hour %s" % i for i in range(1, 48)] + ["b == %s" % i for i in range(4)]
 
@@ -77,11 +77,10 @@ def to_feature_vec(row):
 
     categories = [boole(b == x) for x in range(4)]
     hours = [boole(date.hour == x) for x in range(0, 25)]
-    polynomials = list(chain(*Poly.fit_transform([date.hour, temp, bias])))
+    polynomials = list(chain(*Poly.fit_transform([date.hour, date.month, temp, year, number, weekday, minutes])))
     weekdays = [boole(weekday == x) for x in range(1, 8)]
 
     return [date.hour, bias, a, c, temp, hum, precip] + hours + categories + polynomials + weekdays + list(date.isocalendar())
-             # + period(date.hour, 24, 24)
 
 
 def get_date(s):
@@ -108,7 +107,7 @@ def linear_regression(Xtrain, Ytrain, X, Y):
     """
 
     # regressor = linear_model.LinearRegression()
-    regressor = ensemble.RandomForestRegressor()
+    regressor = ensemble.RandomForestRegressor(n_estimators=30, n_jobs=-1)
     regressor.fit(Xtrain, Ytrain)
 
     scorefun = metrics.make_scorer(least_squares_loss)
@@ -153,8 +152,8 @@ def ridge_regression(Xtrain, Ytrain, X, Y):
     """
 
     regressor = linear_model.Ridge()
-    param_grid = {'alpha' : np.linspace(0, 100, 10)} # number of alphas is arbitrary
-    scorefun = metrics.make_scorer(lambda x, y: -logscore(x, y)) # logscore is always maximizing... but we want the minium
+    param_grid = {'alpha' : np.linspace(30, 100, 10)} # number of alphas is arbitrary
+    scorefun = metrics.make_scorer(least_squares_loss) # logscore is always maximizing... but we want the minium
     gs = grid_search.GridSearchCV(regressor, param_grid, scoring = scorefun, cv = 5)
     gs.fit(Xtrain,Ytrain)
 
@@ -207,10 +206,10 @@ def main():
 
     mean_prediction = np.array([np.mean(list(g)) for k, g in group_predictions(preprocessing.scale(Xplot), Yplot)])
 
-    plt.plot(Xplot, Ytest, 'bo', alpha = 0.1) # input data
-    plt.plot(Xplot, Yplot, 'go', alpha = 0.3)
-    plt.plot(Hplot, mean_prediction, 'r', linewidth = 3)
-    # plt.plot(Xplot, np.exp(Yplot - Ytest), 'ro', linewidth = 3, alpha = 0.1) # prediction
+    # plt.plot(Xplot, Ytest, 'bo', alpha = 0.1) # input data
+    # plt.plot(Xplot, Yplot, 'go', alpha = 0.3)
+    # plt.plot(Hplot, mean_prediction, 'r', linewidth = 3)
+    plt.plot(Xplot, np.exp(Yplot - Ytest), 'ro', linewidth = 3, alpha = 0.1) # prediction
     plt.show()
 
     ### Output ###
