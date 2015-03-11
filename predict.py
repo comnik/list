@@ -77,10 +77,11 @@ def to_feature_vec(row):
 
     categories = [boole(b == x) for x in range(4)]
     hours = [boole(date.hour == x) for x in range(0, 25)]
+    days = [boole((date.month * 31 + date.day) == x) for x in range(1, 372)]
     polynomials = list(chain(*Poly.fit_transform([date.hour, date.month, temp, year, number, weekday, minutes])))
     weekdays = [boole(weekday == x) for x in range(1, 8)]
 
-    return [date.hour, bias, a, c, temp, hum, precip] + hours + categories + polynomials + weekdays + list(date.isocalendar())
+    return [date.hour, bias, a, c, temp, hum, precip] + hours + categories + polynomials + weekdays + list(date.isocalendar()) + days
 
 
 def get_date(s):
@@ -107,7 +108,7 @@ def linear_regression(Xtrain, Ytrain, X, Y):
     """
 
     # regressor = linear_model.LinearRegression()
-    regressor = ensemble.RandomForestRegressor(n_estimators=30, n_jobs=-1)
+    regressor = ensemble.RandomForestRegressor(n_estimators=20, n_jobs=-1)
     regressor.fit(Xtrain, Ytrain)
 
     scorefun = metrics.make_scorer(least_squares_loss)
