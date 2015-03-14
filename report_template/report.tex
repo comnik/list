@@ -18,7 +18,7 @@
 \renewcommand{\familydefault}{\sfdefault}
 
 \title{Introduction to Learning and Intelligent Systems - Spring 2015}
-\author{member1@student.ethz.ch\\ member2@student.ethz.ch\\ member3@student.ethz.ch\\}
+\author{etienned@ethz.ch\\ ary@student.ethz.ch\\ ngoebel@student.ethz.ch\\}
 \date{\today}
 
 \begin{document}
@@ -26,8 +26,34 @@
 
 \section*{Project 1 : Regression}
 
-Briefly describe the steps used to produce the solution. Feel
-free to add plots or screenshots if you think it's necessary. The
-report should contain a maximum of 2 pages.
+\subsection*{Preparation}
+
+We establish a simple pipeline for transforming the input file into our feature-matrix.
+This is encapsulated in the function \texttt{get\_features}.
+It takes a path as an input, reads the csv row-wise and
+transforms those rows into feature-vectors, using the \texttt{to\_feature\_vec} function.
+
+We also transform the Y-values to $\log(1 + Y)$, thus reducing the problem
+to a vanilla least-squares regression.
+
+\subsection*{Feature Extraction}
+
+By
+
+\subsection*{Training}
+
+We settled on a random forest regressor, to combat underfitting errors in
+our previous approaches (linear regressor, ridge regressor). Other approaches
+included Support-Vector Regression with gaussian-, linear- and polynomial kernels,
+but we failed in achieving scores below 0.8 and had to abort grid-search approaches
+for parameter estimation after multiple hours of runtime.
+
+Another renegade approach was K-Nearest-Neighbour-Regression, which we were able
+to fine tune up until a score of 0.43. Following our success with the random forest regressor, we regretfully
+abandoned this line of enquiry.
+
+Finally we experimented with different numbers of estimators for the random forest regressor,
+settling on 30.
+
 
 \end{document}

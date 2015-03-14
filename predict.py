@@ -31,8 +31,6 @@ epoch = datetime.datetime.utcfromtimestamp(0)
 
 boole = lambda x: 1 if x else -1
 
-feature_names = ["hour", "bias", "a", "c", "temp", "hum", "precip"] + ["hour %s" % i for i in range(1, 48)] + ["b == %s" % i for i in range(4)]
-
 
 def to_feature_vec(row):
     """
@@ -48,11 +46,11 @@ def to_feature_vec(row):
 
     year, number, weekday = date.isocalendar()
 
-    categories = [boole(b == x) for x in range(4)]
-    hours = [boole(date.hour == x) for x in range(0, 25)]
-    days = [boole((date.month * 31 + date.day) == x) for x in range(1, 372)]
+    categories  = [boole(b == x) for x in range(4)]
+    hours       = [boole(date.hour == x) for x in range(0, 25)]
+    days        = [boole((date.month * 31 + date.day) == x) for x in range(1, 372)]
     polynomials = list(chain(*Poly.fit_transform([date.hour, date.month, temp, year, number, weekday, minutes])))
-    weekdays = [boole(weekday == x) for x in range(1, 8)]
+    weekdays    = [boole(weekday == x) for x in range(1, 8)]
 
     return [date.hour, bias, a, c, temp, hum, precip] + hours + categories + polynomials + weekdays + list(date.isocalendar()) + days
 
@@ -69,6 +67,7 @@ def get_features(inpath):
     Reads our input data from a csv file
     and returns the feature-matrix.
     """
+
     with open(inpath, 'r') as fin:
         reader = csv.reader(fin, delimiter=',')
         X = [to_feature_vec(row) for row in reader]
@@ -121,18 +120,14 @@ def main():
     # Train the model.
     model = linear_regression(Xtrain, Ytrain, X, Y)
 
-    print('Coefficients: ', model.coef_)
-    print(model.intercept_)
-
-    Hplot = np.array(range(0, 24))
     Xplot = Xtest[:, 0]
     Yplot = model.predict(Xtest)
 
-    mean_prediction = np.array([np.mean(list(g)) for k, g in group_predictions(preprocessing.scale(Xplot), Yplot)])
-
     plt.plot(rand_jitter(Xplot), Ytest, 'bo', alpha = 0.1) # training data
-    plt.plot(Xplot, Yplot, 'go', alpha = 0.3) # prediction
-    # plt.plot(Hplot, mean_prediction, 'r', linewidth = 3) # mean prediction
+    plt.plot(rand_jitter(Xplot), Yplot, 'go', alpha = 0.3) # prediction
+
+    # mean_prediction = np.array([np.mean(list(g)) for k, g in group_predictions(preprocessing.scale(Xplot), Yplot)])
+    # plt.plot(np.array(range(0, 24)), mean_prediction, 'r', linewidth = 3) # mean prediction
     # plt.plot(Xplot, np.exp(Yplot - Ytest), 'ro', linewidth = 3, alpha = 0.1) # residuals
     plt.show()
 
@@ -140,9 +135,9 @@ def main():
     model.fit(X, Y)
 
     # Output
-    Xval = get_features('project_data/validate.csv')
+    Xval = get_features('project_data/test.csv')
     Ypred = transform_back(model.predict(Xval))
-    np.savetxt('out/validate_y.txt', Ypred)
+    np.savetxt('out/test_y.txt', Ypred)
 
     raw_input('Press any key to exit...')
 
