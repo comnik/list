@@ -38,7 +38,19 @@ to a vanilla least-squares regression.
 
 \subsection*{Feature Extraction}
 
-By
+By plotting the inputs in various ways we noticed, as expected,
+a major periodicity with respect to time. Our first try in making use
+of this knowledge consisted of adding trigonometric features of the
+hour of the day, as well as under multipler periods, to simulate something
+resembling a Fourier-decomposition. We later settled for a simpler approach
+of categorizing all inputs by day of the year, hour of the day, as well as day of the week,
+using one-hot vectors of the respective length.
+
+We tried simulating polynomial features using a kernelized regressor, but either
+failed to achieve a promising score or sensible training times. Thus we
+had to use \texttt{scikit.preprocessing.PolynomialFeatures} to generate polynomial
+features of up to degree three. Higher degrees did not seem to improve the score meaningfully.
+
 
 \subsection*{Training}
 
